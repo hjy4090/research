@@ -1,0 +1,74 @@
+import cv2
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd  # Import pandas to handle Excel export
+
+# Directories containing the frames
+input_dir_camera1 = '/Users/jun/Documents/Experiments/LHPG Growth Video/Analysis/YIG-1B2O3/extracted_frames/output/camera1_frames'
+input_dir_camera2 = '/Users/jun/Documents/Experiments/LHPG Growth Video/Analysis/YIG-1B2O3/extracted_frames/output/camera2_frames'
+
+# Number of frames (assuming one frame per second)
+total_frames = 226  # Adjust based on your actual number of frames
+
+# Arrays to hold the calculated areas for each camera
+areas_camera1 = []
+areas_camera2 = []
+time_points = np.arange(total_frames)  # Time points array
+
+# Loop through each frame and calculate the molten zone area
+for i in range(total_frames):
+    # Load the images for the current frame from both cameras
+    frame_path_camera1 = os.path.join(input_dir_camera1, f'camera1_frame_{i:04d}.png')
+    frame_path_camera2 = os.path.join(input_dir_camera2, f'camera2_frame_{i:04d}.png')
+    
+    image_camera1 = cv2.imread(frame_path_camera1, cv2.IMREAD_GRAYSCALE)
+    image_camera2 = cv2.imread(frame_path_camera2, cv2.IMREAD_GRAYSCALE)
+    
+    # Threshold the images to isolate the molten zone (adjust the threshold as needed)
+    _, thresh_camera1 = cv2.threshold(image_camera1, 128, 255, cv2.THRESH_BINARY_INV)
+    _, thresh_camera2 = cv2.threshold(image_camera2, 128, 255, cv2.THRESH_BINARY_INV)
+    
+    # Calculate the area of the molten zone for each camera (count the white pixels)
+    area_camera1 = cv2.countNonZero(thresh_camera1)
+    area_camera2 = cv2.countNonZero(thresh_camera2)
+    
+    # Store the areas
+    areas_camera1.append(area_camera1)
+    areas_camera2.append(area_camera2)
+
+# Convert to numpy arrays for easier manipulation
+areas_camera1 = np.array(areas_camera1)
+areas_camera2 = np.array(areas_camera2)
+
+# Calculate the average area and standard deviation (for error bars)
+average_areas = (areas_camera1 + areas_camera2) / 2
+error_bars = np.abs(areas_camera1 - areas_camera2) / 2
+
+# Save the data to an Excel file
+df = pd.DataFrame({
+    'Time (seconds)': time_points,
+    'Area Camera 1 (pixels)': areas_camera1,
+    'Area Camera 2 (pixels)': areas_camera2,
+    'Average Area (pixels)': average_areas,
+    'Error Bars (pixels)': error_bars
+})
+
+# Specify the output Excel file path
+excel_output_path = '/Users/jun/Documents/Experiments/LHPG Growth Video/Analysis/YIG-1B2O3/extracted_frames/output/molten_zone_areas.xlsx'
+df.to_excel(excel_output_path, index=False)
+
+# Plot the results
+plt.figure(figsize=(12, 6))
+plt.errorbar(time_points, average_areas, yerr=error_bars, fmt='-o', label='Average Molten Zone Area', capsize=5)
+
+# Mark the intervals where the laser intensity was increased every 10 seconds
+for t in range(0, total_frames, 10):
+    plt.axvline(x=t, color='red', linestyle='--', label='Laser Intensity Increase' if t == 0 else "")
+
+plt.xlabel('Time (seconds)')
+plt.ylabel('Molten Zone Area (pixels)')
+plt.title('Molten Zone Area Over Time with Laser Intensity Increases')
+plt.legend()
+plt.grid(True)
+plt.show()
