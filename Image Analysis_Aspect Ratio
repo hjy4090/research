@@ -1,0 +1,126 @@
+import cv2
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Directories containing the frames
+input_dir_camera1 = '/Users/jun/Documents/Experiments/LHPG Growth Video/Analysis/YIG-1B2O3/extracted_frames/output/camera1_frames'
+input_dir_camera2 = '/Users/jun/Documents/Experiments/LHPG Growth Video/Analysis/YIG-1B2O3/extracted_frames/output/camera2_frames'
+
+# Create separate output directories for each camera inside their respective input folders
+output_dir_camera1 = os.path.join(input_dir_camera1, 'aspect_ratio_analysis')
+output_dir_camera2 = os.path.join(input_dir_camera2, 'aspect_ratio_analysis')
+
+# Create output directories if they don't exist
+os.makedirs(output_dir_camera1, exist_ok=True)
+os.makedirs(output_dir_camera2, exist_ok=True)
+
+# Number of frames (assuming one frame per second)
+total_frames = 225  # Adjust based on your actual number of frames
+
+# Arrays to hold aspect ratio values
+aspect_ratios_camera1 = []
+aspect_ratios_camera2 = []
+frame_numbers = []
+
+# Loop through each frame and calculate aspect ratio for both cameras
+for i in range(total_frames):
+    # Construct the file paths
+    frame_path_camera1 = os.path.join(input_dir_camera1, f'camera1_frame_{i:04d}.png')
+    frame_path_camera2 = os.path.join(input_dir_camera2, f'camera2_frame_{i:04d}.png')
+    
+    # Load images from both cameras
+    image_camera1 = cv2.imread(frame_path_camera1, cv2.IMREAD_GRAYSCALE)
+    image_camera2 = cv2.imread(frame_path_camera2, cv2.IMREAD_GRAYSCALE)
+    
+    # Check if images are loaded properly
+    if image_camera1 is None or image_camera2 is None:
+        print(f"Warning: One or both images for frame {i:04d} could not be loaded.")
+        continue
+    
+    # Threshold the images
+    _, thresh_camera1 = cv2.threshold(image_camera1, 150, 255, cv2.THRESH_BINARY_INV)
+    _, thresh_camera2 = cv2.threshold(image_camera2, 150, 255, cv2.THRESH_BINARY_INV)
+    
+    # Find contours in the thresholded images
+    contours_camera1, _ = cv2.findContours(thresh_camera1, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    contours_camera2, _ = cv2.findContours(thresh_camera2, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    
+    if contours_camera1 and contours_camera2:
+        # Calculate aspect ratios for both cameras
+        largest_contour_camera1 = max(contours_camera1, key=cv2.contourArea)
+        largest_contour_camera2 = max(contours_camera2, key=cv2.contourArea)
+        
+        x1, y1, w1, h1 = cv2.boundingRect(largest_contour_camera1)
+        x2, y2, w2, h2 = cv2.boundingRect(largest_contour_camera2)
+        
+        aspect_ratio_camera1 = float(w1) / h1
+        aspect_ratio_camera2 = float(w2) / h2
+        
+        aspect_ratios_camera1.append(aspect_ratio_camera1)
+        aspect_ratios_camera2.append(aspect_ratio_camera2)
+        frame_numbers.append(i)
+        
+        # Draw the contours and bounding boxes for clarity (optional)
+        contour_image_camera1 = cv2.cvtColor(image_camera1, cv2.COLOR_GRAY2BGR)
+        contour_image_camera2 = cv2.cvtColor(image_camera2, cv2.COLOR_GRAY2BGR)
+        
+        cv2.drawContours(contour_image_camera1, [largest_contour_camera1], -1, (0, 0, 255), 2)  # Red contour
+        cv2.rectangle(contour_image_camera1, (x1, y1), (x1 + w1, y1 + h1), (0, 255, 0), 2)  # Green bounding box
+        
+        cv2.drawContours(contour_image_camera2, [largest_contour_camera2], -1, (0, 0, 255), 2)  # Red contour
+        cv2.rectangle(contour_image_camera2, (x2, y2), (x2 + w2, y2 + h2), (0, 255, 0), 2)  # Green bounding box
+        
+        # Save the images with the contours and bounding boxes drawn (optional)
+        output_path_camera1 = os.path.join(output_dir_camera1, f'camera1_aspect_ratio_{i:04d}.png')
+        output_path_camera2 = os.path.join(output_dir_camera2, f'camera2_aspect_ratio_{i:04d}.png')
+        
+        cv2.imwrite(output_path_camera1, contour_image_camera1)
+        cv2.imwrite(output_path_camera2, contour_image_camera2)
+    
+    print(f"Processed frame {i:04d}.")
+
+# Convert to numpy arrays
+aspect_ratios_camera1 = np.array(aspect_ratios_camera1)
+aspect_ratios_camera2 = np.array(aspect_ratios_camera2)
+
+# Calculate average aspect ratio and error (standard deviation)
+average_aspect_ratios = (aspect_ratios_camera1 + aspect_ratios_camera2) / 2
+aspect_ratio_errors = np.abs(aspect_ratios_camera1 - aspect_ratios_camera2) / 2
+
+# Save the data to an Excel file
+df_camera1 = pd.DataFrame({
+    'Frame Number': frame_numbers,
+    'Aspect Ratio Camera 1': aspect_ratios_camera1
+})
+
+df_camera2 = pd.DataFrame({
+    'Frame Number': frame_numbers,
+    'Aspect Ratio Camera 2': aspect_ratios_camera2
+})
+
+df_average = pd.DataFrame({
+    'Frame Number': frame_numbers,
+    'Average Aspect Ratio': average_aspect_ratios,
+    'Error': aspect_ratio_errors
+})
+
+# Save the data to Excel files in their respective folders
+excel_output_path_camera1 = os.path.join(output_dir_camera1, 'aspect_ratio_data_camera1.xlsx')
+excel_output_path_camera2 = os.path.join(output_dir_camera2, 'aspect_ratio_data_camera2.xlsx')
+excel_output_path_average = os.path.join(input_dir_camera1, 'average_aspect_ratio_data.xlsx')  # Save average data to camera1 input directory
+
+df_camera1.to_excel(excel_output_path_camera1, index=False)
+df_camera2.to_excel(excel_output_path_camera2, index=False)
+df_average.to_excel(excel_output_path_average, index=False)
+
+# Plot average aspect ratio with error bars
+plt.figure(figsize=(10, 6))
+plt.errorbar(frame_numbers, average_aspect_ratios, yerr=aspect_ratio_errors, fmt='-o', label='Average Aspect Ratio', capsize=5)
+plt.xlabel('Frame Number')
+plt.ylabel('Aspect Ratio')
+plt.title('Average Aspect Ratio of Molten Zone Over Time (Camera 1 & 2)')
+plt.legend()
+plt.grid(True)
+plt.show()
